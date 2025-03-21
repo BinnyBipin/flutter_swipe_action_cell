@@ -193,6 +193,7 @@ class _SwipeActionPageState extends State<SwipeActionPage> {
       selectedForegroundColor: Colors.black.withAlpha(30),
       trailingActions: [
         SwipeAction(
+            widthSpace: 80,
             title: "delete",
             performsFirstActionWithFullSwipe: true,
             nestedAction: SwipeNestedAction(title: "confirm"),
@@ -202,7 +203,6 @@ class _SwipeActionPageState extends State<SwipeActionPage> {
               list.removeAt(index);
               setState(() {});
             }),
-        SwipeAction(title: "action2", color: Colors.grey, onTap: (handler) {}),
       ],
       leadingActions: [
         SwipeAction(

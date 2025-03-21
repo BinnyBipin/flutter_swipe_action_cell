@@ -117,6 +117,14 @@ class SwipeActionCell extends StatefulWidget {
   /// 关闭动画的曲线
   final Curve closeAnimationCurve;
 
+  /// Callback for trailing (left swipe) action progress changes
+  /// Value is from 0.0 (closed) to 1.0 (fully open)
+  final ValueChanged<double>? onTrailingProgressChanged;
+
+  /// Callback for leading (right swipe) action progress changes
+  /// Value is from 0.0 (closed) to 1.0 (fully open)
+  final ValueChanged<double>? onLeadingProgressChanged;
+
   /// ## About [key] / 关于[key]
   /// You should put a key,like [ValueKey] or [ObjectKey]
   /// don't use [GlobalKey] or [UniqueKey]
@@ -154,6 +162,8 @@ class SwipeActionCell extends StatefulWidget {
     this.openAnimationCurve = Curves.easeOutQuart,
     this.closeAnimationCurve = Curves.easeOutQuart,
     this.selectedForegroundColor,
+    this.onTrailingProgressChanged,
+    this.onLeadingProgressChanged,
   }) : super(key: key);
 
   @override
@@ -483,6 +493,22 @@ class SwipeActionCellState extends State<SwipeActionCell>
     _closeNestedAction();
   }
 
+  // Helper method to update progress
+  void _updateProgress() {
+    if (widget.onTrailingProgressChanged != null &&
+        whenTrailingActionShowing &&
+        maxTrailingPullWidth > 0) {
+      final progress =
+          (currentOffset.dx.abs() / maxTrailingPullWidth).clamp(0.0, 1.0);
+      widget.onTrailingProgressChanged!(progress);
+    } else if (widget.onLeadingProgressChanged != null &&
+        whenLeadingActionShowing &&
+        maxLeadingPullWidth > 0) {
+      final progress = (currentOffset.dx / maxLeadingPullWidth).clamp(0.0, 1.0);
+      widget.onLeadingProgressChanged!(progress);
+    }
+  }
+
   void _onHorizontalDragUpdate(DragUpdateDetails details) {
     if (editing) return;
     if (!hasLeadingAction && details.delta.dx >= 0 && currentOffset.dx >= 0.0) {
@@ -540,6 +566,7 @@ class SwipeActionCellState extends State<SwipeActionCell>
     }
 
     modifyOffsetIfOverScrolled();
+    _updateProgress(); // Call progress update
     setState(() {});
   }
 
@@ -576,6 +603,7 @@ class SwipeActionCellState extends State<SwipeActionCell>
     }
 
     modifyOffsetIfOverScrolled();
+    _updateProgress(); // Call progress update
     setState(() {});
   }
 
@@ -678,6 +706,7 @@ class SwipeActionCellState extends State<SwipeActionCell>
       ..addListener(() {
         if (lockAnim) return;
         this.currentOffset = Offset(animation.value, 0);
+        _updateProgress();
         setState(() {});
       });
     adjustOffsetAnimController.forward().whenCompleteOrCancel(() {
@@ -695,14 +724,27 @@ class SwipeActionCellState extends State<SwipeActionCell>
         ..addListener(() {
           if (lockAnim) return;
           this.currentOffset = Offset(animation.value, 0);
+
+          // Update progress during animation
+          _updateProgress();
+
           setState(() {});
         });
       controller.duration =
           Duration(milliseconds: widget.openAnimationDuration);
       controller.forward();
     } else {
+      // For non-animated opens
       this.currentOffset =
           Offset(trailing ? -maxTrailingPullWidth : maxLeadingPullWidth, 0);
+
+      // Call progress update with full value (1.0)
+      if (trailing && widget.onTrailingProgressChanged != null) {
+        widget.onTrailingProgressChanged!(1.0);
+      } else if (!trailing && widget.onLeadingProgressChanged != null) {
+        widget.onLeadingProgressChanged!(1.0);
+      }
+
       setState(() {});
     }
   }
@@ -718,6 +760,10 @@ class SwipeActionCellState extends State<SwipeActionCell>
         ..addListener(() {
           if (lockAnim) return;
           this.currentOffset = Offset(animation.value, 0);
+
+          // Update progress during closing animation
+          _updateProgress();
+
           setState(() {});
         });
 
@@ -726,6 +772,15 @@ class SwipeActionCellState extends State<SwipeActionCell>
       return controller.forward()
         ..whenCompleteOrCancel(() {
           ignoreActionButtonHit = false;
+
+          // When fully closed, call with 0.0
+          if (whenTrailingActionShowing &&
+              widget.onTrailingProgressChanged != null) {
+            widget.onTrailingProgressChanged!(0.0);
+          } else if (whenLeadingActionShowing &&
+              widget.onLeadingProgressChanged != null) {
+            widget.onLeadingProgressChanged!(0.0);
+          }
         });
     }
   }
@@ -755,8 +810,16 @@ class SwipeActionCellState extends State<SwipeActionCell>
         /// so the code below is to solve this problem....
         if (whenTrailingActionShowing) {
           currentOffset = Offset(-maxTrailingPullWidth, 0);
+          if (widget.onTrailingProgressChanged != null) {
+            widget.onTrailingProgressChanged!(
+                1.0); // Still fully open during delete animation
+          }
         } else if (whenLeadingActionShowing) {
           currentOffset = Offset(maxLeadingPullWidth, 0);
+          if (widget.onLeadingProgressChanged != null) {
+            widget.onLeadingProgressChanged!(
+                1.0); // Still fully open during delete animation
+          }
         }
       });
 
@@ -878,7 +941,9 @@ class SwipeActionCellState extends State<SwipeActionCell>
                   width = constraints.maxWidth;
                   // Action buttons
                   final bool shouldHideActionButtons =
-                      currentOffset.dx == 0.0 || editController.isAnimating || editing;
+                      currentOffset.dx == 0.0 ||
+                          editController.isAnimating ||
+                          editing;
                   final Widget trailing = shouldHideActionButtons
                       ? const SizedBox()
                       : _buildTrailingActionButtons();
